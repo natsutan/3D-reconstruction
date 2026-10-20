@@ -1,7 +1,11 @@
-"""三角錐を2方向から描画し、画像4枚と特徴点座標のCSV2個を保存する。
+"""三角錐を2方向から描画し、画像4枚と特徴点座標のCSV4個を保存する。
 
 Python 3.13 / Windows 11・Ubuntu。依存: NumPy, Pillow
 実行: python make_two_views.py
+
+view_XX_points.csv: 従来どおり画素中心へ丸めた座標。
+view_XX_points_ideal.csv: project()の出力を丸めずに保存した理想座標。
+どちらもCOLMAPと同じ座標規約で、列は id,x,y。
 """
 import csv
 from pathlib import Path
@@ -135,8 +139,12 @@ def select_visible_markers(markers, visible):
                   key=lambda m: m["id"])
 
 
-def save_points_csv(path, vertices, faces, markers, camera):
-    """整数のピクセル番号に0.5を足し、そのピクセル中心を保存する。"""
+def save_points_csv(path, vertices, faces, markers, camera, *, ideal=False):
+    """画素中心へ丸めた座標、または丸めない理想座標を保存する。
+
+    ideal=False: 従来どおりfloorで画素番号を求め、0.5を足す。
+    ideal=True: project()の出力をそのまま保存する。
+    """
     center, R, t = camera
     visible = visible_faces(vertices, faces, center)
     shown = select_visible_markers(markers, visible)
@@ -145,12 +153,17 @@ def save_points_csv(path, vertices, faces, markers, camera):
         writer = csv.writer(file)
         writer.writerow(["id", "x", "y"])
         for marker, (x, y) in zip(shown, uv):
-            # project()は左上の角が原点なので、floorで画素の整数番号を得る。
-            # その番号に0.5を足すと、COLMAPでの画素中心の座標になる。
-            pixel_x = int(np.floor(x))
-            pixel_y = int(np.floor(y))
-            writer.writerow([marker["id"], f"{pixel_x + 0.5:.1f}",
-                             f"{pixel_y + 0.5:.1f}"])
+            if ideal:
+                # Pythonのfloat表記で保存し、読み戻すと同じfloat64値になる。
+                # 桁数指定による丸めや、画素中心へ移すための+0.5は行わない。
+                writer.writerow([marker["id"], repr(float(x)), repr(float(y))])
+            else:
+                # project()は左上の角が原点なので、floorで画素の整数番号を得る。
+                # その番号に0.5を足すと、COLMAPでの画素中心の座標になる。
+                pixel_x = int(np.floor(x))
+                pixel_y = int(np.floor(y))
+                writer.writerow([marker["id"], f"{pixel_x + 0.5:.1f}",
+                                 f"{pixel_y + 0.5:.1f}"])
 
 
 def add_numbers(draw, markers, marker_uv, font):
@@ -219,14 +232,16 @@ def main():
             path = OUTPUT_DIR / f"view_{index:02d}_{suffix}.png"
             image.save(path)
             print(f"Saved: {path}")
-    # 番号なし・ありは同じ視点のため、座標CSVは視点ごとに1個ずつ。
+    # 各視点について、従来の座標CSVに加えて理想座標CSVも保存する。
     for index, angle in enumerate(AZIMUTHS_DEG, start=1):
         camera = make_camera(angle, orbit_center)
         path = OUTPUT_DIR / f"view_{index:02d}_points.csv"
         save_points_csv(path, vertices, faces, markers, camera)
         print(f"Saved: {path}")
+        ideal_path = OUTPUT_DIR / f"view_{index:02d}_points_ideal.csv"
+        save_points_csv(ideal_path, vertices, faces, markers, camera, ideal=True)
+        print(f"Saved: {ideal_path}")
 
 
 if __name__ == "__main__":
     main()
-
