@@ -1,0 +1,6 @@
+{
+  "model": "SIMPLE_PINHOLE",
+  "width": 640,
+  "height": 360,
+  "params": [515.5555555555555, 320.0, 180.0]
+}
